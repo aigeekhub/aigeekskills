@@ -1,0 +1,97 @@
+{
+  "substitutions": [
+    {
+      "pattern": "~/.cursor/rules/pstack-models.mdc",
+      "replacement": "~/.claude/pstack-models.md",
+      "rationale": "the per-role override sheet; must precede the generic .cursor/rules/ rule or that rule mangles the path"
+    },
+    {
+      "pattern": "AskQuestion",
+      "replacement": "AskUserQuestion",
+      "rationale": "Claude Code's fixed-choice question tool; upstream Cursor names it AskQuestion"
+    },
+    {
+      "pattern": "the `Task` tool",
+      "replacement": "the `Agent` tool",
+      "rationale": "Claude Code dispatches subagents with the Agent tool; Cursor calls it Task"
+    },
+    {
+      "pattern": "the Task tool",
+      "replacement": "the Agent tool",
+      "rationale": "same tool, unbackticked"
+    },
+    {
+      "pattern": "`Task` call",
+      "replacement": "`Agent` call",
+      "rationale": "same tool, as a noun for one dispatch (also matches `Task` calls)"
+    },
+    {
+      "pattern": "control skill",
+      "replacement": "driver skill",
+      "rationale": "driver selection lives in poteto-mode/SKILL.md Non-negotiables; preserve the older generator trigger in its local description"
+    },
+    {
+      "pattern": "restart Cursor",
+      "replacement": "restart Claude Code",
+      "rationale": "the host application"
+    },
+    {
+      "pattern": "(default `claude-fable-5-1-thinking-max`)",
+      "replacement": "(default in poteto-mode's Models section)",
+      "rationale": "model defaults live in models.json and are stamped into Models sections, never hard-coded in prose"
+    },
+    {
+      "pattern": ".cursor/skills/",
+      "replacement": ".claude/skills/",
+      "rationale": "personal skills directory"
+    },
+    {
+      "pattern": ".cursor/rules/",
+      "replacement": "CLAUDE.md imports",
+      "rationale": "Claude Code has no auto-applied rules directory; inclusion is explicit via CLAUDE.md"
+    },
+    {
+      "pattern": "`generalPurpose`",
+      "replacement": "`general-purpose`",
+      "rationale": "Claude Code's built-in agent type is general-purpose"
+    }
+  ],
+  "denylist": [
+    {
+      "token": "`verify` skill (UIs)",
+      "hint": "use the driver policy in poteto-mode/SKILL.md Non-negotiables"
+    },
+    {
+      "token": "`verify` for UIs",
+      "hint": "use the driver policy in poteto-mode/SKILL.md Non-negotiables"
+    },
+    {
+      "token": "control-cli",
+      "hint": "use the driver policy in poteto-mode/SKILL.md Non-negotiables; rewrite the sentence, don't token-swap"
+    },
+    {
+      "token": "control-ui",
+      "hint": "use the driver policy in poteto-mode/SKILL.md Non-negotiables; rewrite the sentence, don't token-swap"
+    },
+    {
+      "token": "AskQuestion",
+      "hint": "should have been substituted to AskUserQuestion; substitution rule failed to apply"
+    },
+    {
+      "token": ".cursor/",
+      "hint": "Cursor config path survived; map it to the Claude Code equivalent"
+    },
+    {
+      "token": "Cursor cloud agent",
+      "hint": "Claude Code runs subagents locally; the port isolates writers with worktrees"
+    },
+    {
+      "token": "cursor.com",
+      "hint": "Cursor product URL; check whether the sentence applies to Claude Code at all"
+    },
+    {
+      "token": "/goal",
+      "hint": "Cursor's /goal has no Claude Code equivalent; the autopilot playbooks keep the objective in standing orders"
+    }
+  ]
+}
