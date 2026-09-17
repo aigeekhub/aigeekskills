@@ -1,0 +1,93 @@
+# Contributing
+
+Thanks for helping out. This repo is a **port**, not an original work: the `skills/` tree tracks [upstream pstack](https://github.com/cursor/plugins/tree/main/pstack) and gets synced forward periodically. That one fact shapes most of what follows.
+
+[CONTEXT.md](CONTEXT.md) is the glossary for the terms below.
+
+## The sync boundary
+
+Upstream owns skill content. This port owns the Cursor-to-Claude-Code translation.
+
+Before changing a `SKILL.md`, work out which side your change lives on:
+
+- **Fixing the port.** A Cursor primitive that resolves wrong on Claude Code, a broken cross-reference, a stale model slug. Belongs here. Open a PR.
+- **Changing what a skill does.** New steps, a different workflow, reworded guidance. Usually belongs upstream. Land it there and it arrives here on the next sync. If you land it only here, the next sync conflicts with it and someone has to re-litigate the change under time pressure.
+
+Local-only changes are fine when they're genuinely port-specific. Say so in the PR description, so the next sync knows it is deliberate and not drift.
+
+Every substitution is recorded per-skill in [CHANGES.md](CHANGES.md). If you add one, record it there in the same PR.
+
+### Running a sync
+
+```shell
+bun tools/sync.mjs pstack <new-upstream-sha>
+```
+
+`tools/upstream.json` pins the current upstream SHA per component; `tools/substitutions.json` holds the mechanical Cursor-to-Claude rewrites and a denylist of Cursor-isms that need a rewritten sentence rather than a token swap. The tool fetches both upstream revisions and derives each upstream file into its port form: the substitutions, then `deriveSkill` in `tools/generate.mjs`, which drops `disable-model-invocation` (or swaps it for `user-invocable: false` on a `principle-*` leaf) and applies the generator's stamps, appending a `## Models` section where upstream has none. It writes files whose only local differences came from upstream (new files included), deletes files upstream removed that the port never edited, and runs `git merge-file` on the rest: a file the port forked that upstream left alone is counted as forked and left alone, non-overlapping edits are merged and written, and only a real conflict is reported, with its hunk count. Binaries that differ three ways and files upstream deleted that the port had edited join the same conflicts list under their own reason. Any denylist token in a written file fails the run with the file, line, and hint — add a substitution rule or rewrite the sentence, then rerun. The pin advances only on success. Write the CHANGES.md entry from the printed report, then run the generator and the tests as usual.
+
+`--dry-run` reports without writing. Passing the pinned SHA itself under `--dry-run` prints the ownership map. Every file under the forked count is one the port has forked, nothing is written or conflicted, and everything else syncs clean.
+
+## Before you open a PR
+
+Run the generator and the tests:
+
+```shell
+bun tools/generate.mjs
+bun test tests/
+```
+
+The generator stamps the root `VERSION` into the three plugin manifests, validates every shared Agent Skill's `name` and `description`, emits one Codex prompt stub per public skill from its row in the README slash-command table, and stamps model defaults from `plugins/pstack/models.json`. It also copies the five files declared in `PORTABLE_ASSETS` into the skills-only boundary and removes stale files from their generated directories. `NOTICE-skills.md` is the source for the scoped notice that travels with those skills.
+
+The same run rejects missing or escaping local Markdown links and direct instructions to open unreachable paths. It also checks for stray model slugs, requires a matching `CHANGES.md` heading, validates the Codex marketplace and Claude hook paths, and enforces the plugin layout invariants: no `commands/` directory, no `disable-model-invocation` on any skill, `user-invocable: false` on every `principle-*` leaf, and plugin agents dispatched by their namespaced `pstack:<name>`. CI reruns it and fails on any resulting diff, so commit whatever it changes. Adding a skill means giving it `name` and `description` frontmatter and, unless it is a `principle-*` leaf carrying `user-invocable: false`, a row in the README slash-command table. That row is the source of the Codex slash-menu one-liner and of the table's order; the generator fails by name on a skill without a row or a row without a skill. Changing a model default means editing `models.json`, never a skill body; a role whose `models` is `"panel"` takes the shared panel list, so the panel is written once. `tests/models.test.mjs` pins the file's shape and checks that every role label is named by its skill's prose. A `claude-*` slug in skill prose outside a stamped region fails the generator with the file and line.
+
+`bun test tests/` covers the generator, the sync tool, the link validator, and `tests/invariants.test.mjs`, which builds fixture trees that must trip each layout invariant. One check is behavioral and lives in `tests/skill-collision-repro.sh`: it needs the `claude` CLI and API access and makes one haiku call to prove a user-typed `/plugin:name` reaches a skill with no `commands/` present. CI cannot run it, so run it locally at least once before a release.
+
+If you touched `skills/poteto-mode/scripts/`:
+
+```shell
+cd plugins/pstack/skills/poteto-mode/scripts
+bun install --frozen-lockfile
+bun run typecheck
+bun test orch watch-pr
+```
+
+If you touched a workflow, audit it before pushing:
+
+```shell
+uvx zizmor@1.29.0 --persona pedantic --min-severity low --collect all -- .
+```
+
+`--collect all` matches what CI scans. Pointing zizmor at `.github/workflows/` alone skips `dependabot.yml`, so the local run comes back clean on findings CI will fail on.
+
+## Things that will fail CI
+
+- **A `plugins/pstack/commands/` directory.** Claude Code renders commands and user-invocable skills in the same slash menu, so a trampoline paired with its skill duplicates every `/pstack:<name>` row ([#22](https://github.com/michael-denyer/pstack-claude/issues/22)). Codex stubs live in `plugins/pstack/.codex-plugin/prompts/`. An upstream sync will try to reintroduce `commands/`; move any new stubs across.
+- **`disable-model-invocation` in a skill's frontmatter.** On a skill it makes the Skill tool refuse the invocation outright, which breaks the SessionStart mandate. The `principle-*` leaves use `user-invocable: false` instead.
+- **Stale generated output.** The `Generated files current` job reruns `bun tools/generate.mjs` and fails on any diff. Editing `VERSION` without regenerating, hand-editing a manifest's `version` field, or bumping without a matching `CHANGES.md` heading all land here. The same run validates `hooks/hooks.json`: every `${CLAUDE_PLUGIN_ROOT}` path a command names must exist in the plugin.
+- **A missing or escaping local Markdown link.** `tools/validate-skills.mjs` resolves bare, `./`, `../`, and reference-style targets against their Markdown file. Every local target must exist inside `plugins/pstack/skills`.
+- **Prose naming a plugin file the install does not carry.** The same tool resolves every backticked relative path against its Markdown file and against the plugin root. A token that lands on a real file or directory outside `plugins/pstack/skills` (`agents/comment-sicko.md`, `../../hooks/hooks.json`) fails. Tokens that resolve to nothing (placeholders, slash commands, `plugins/pstack/models.json` maintainer notes) pass. A Markdown link is caught by the link check; this covers the backticked form that is not a link.
+- **A shell script that fails shellcheck.** Every `.sh` file outside `node_modules` is linted at warning severity.
+- **An action pinned to a tag.** Use the full 40-character commit SHA with a version comment. A mutable tag can be force-pushed into our runners.
+- **A workflow file that fails `actionlint`.** Invalid YAML, a malformed expression, an unknown runner label, or a `needs:` pointing at a job that does not exist. Run `actionlint` from the repository root.
+- **A Markdown correctness error.** Reversed link syntax, an empty link target, a missing image alt, a fragment link to a heading that is not there, or an undefined or unused reference definition. The rule set is deliberately correctness-only and lives in `.markdownlint-cli2.jsonc`. Run `npx --yes markdownlint-cli2@0.18.1 '**/*.md'`.
+- **A broken relative link in any Markdown file.** The link job resolves file and fragment targets offline and never touches a remote URL, so external link rot cannot fail your PR. Run `lychee --offline --include-fragments --exclude-path node_modules --exclude-path .git '**/*.md'`.
+
+## Dependency updates
+
+Dependabot keeps the pinned action SHAs current. The vendored scripts' one runtime dependency (`commander`) follows upstream's pin and moves with `tools/sync.mjs`; `osv-scanner` scans `bun.lock` weekly, so a CVE still surfaces. If you bump it by hand, run `bun install` and commit the resulting `bun.lock` in the same change.
+
+## Releasing
+
+Plugin auto-update installs **by version number**, not by tracking `main`. A skill fix merged without a version bump is inert on every installed copy, because the updater sees the same version it already has and does nothing.
+
+So: any PR that changes skill behavior either bumps the version itself or is followed by a release PR that does. The bump is three steps: edit the root `VERSION` file, add a `CHANGES.md` entry under a `## <version>` heading describing what changed and why, and run `bun tools/generate.mjs` to stamp the manifests. Forgetting any of the three fails CI. Run the full invariant script (including the behavioral leg) before merging.
+
+## Commit and PR style
+
+- Explain what changed and why. The diff already shows how.
+- One concern per PR. A behavior fix and a refactor in the same diff are two separate reviews, and reviewing them together means doing neither properly.
+- Claim only what you verified, and name the check. "52/52 bun tests pass" beats "tests pass"; "did not run the behavioral leg" beats silence.
+
+## Reporting bugs
+
+Include the pstack version, the Claude Code (or Codex) version, and the reproduction steps. [#22](https://github.com/michael-denyer/pstack-claude/issues/22) is the model to copy: it named versions, gave numbered steps, and included the experiment that isolated the cause.
