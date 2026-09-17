@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+
+    steps:
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          requireScope: false
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            chore
+            test
+            ci
+            build
+            perf
+            revert
+
+  test:
+    runs-on: ubuntu-latest
+    # A wedged bun --parallel worker (oven-sh/bun#34069) can sit with no output
+    # forever; green runs take about 4 minutes and a timeout-stack run with the
+    # serial re-run about 15. Fail well before GitHub's 6-hour default so the
+    # babysit loop can see it and rerun.
+    timeout-minutes: 30
+
+    env:
+      # Single source of truth for the pinned `claude plugin validate` version:
+      # both the install and its cache key read this, so a bump cannot bump one
+      # and leave the other serving a stale cached binary.
+      CLAUDE_CODE_VERSION: 2.1.220
+
+    steps:
+      - uses: actions/checkout@v6
+        # Full history so release:validate can read the base-branch (origin/main)
+        # release-please manifest when checking release-as pins for staleness.
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Validate release metadata
+        run: bun run release:validate
+
+      # Canonical schema check: runs `claude plugin validate --strict` against
+      # the marketplace catalog and the plugin manifest. The CLI must be
+      # installed via npm, not bun: `bun x` cannot run this package (bun blocks
+      # its required postinstall and cannot resolve its `claude` bin name), and
+      # `bun run` rewrites `npx` in package.json scripts to the broken `bun x`,
+      # so the script invokes a `claude` already on PATH instead.
+      #
+      # The validator version is pinned deliberately for reproducible CI: a
+      # floating @latest would track new upstream validation rules
+      # automatically but could break CI without any repo change. Bump the
+      # pin intentionally to adopt new `claude plugin validate` rules.
+      #
+      # plugin:validate must hit .claude-plugin/plugin.json — `validate .` only
+      # checks the marketplace. Root CLAUDE.md is a symlink to AGENTS.md so
+      # --strict stays green; see AGENTS.md "CI and Quality Gates".
+      #
+      # The install is cached because the npm package is a 165KB wrapper whose
+      # postinstall pulls a platform binary (`@anthropic-ai/claude-code-linux-x64`,
+      # ~275MB unpacked). Registry throughput for that payload is the whole cost
+      # of this step — validation itself is under a second. Observed range on
+      # ubuntu-latest: 3-10s typical, 5m worst case. Caching buys predictability,
+      # not average speed: it caps the tail rather than beating the fast path.
+      # Keying on the pinned version means a hit on every run between bumps.
+      - name: Cache claude-code validator
+        id: cache-claude-code
+        uses: actions/cache@v6
+        with:
+          path: ~/.npm-global
+          key: claude-code-${{ runner.os }}-${{ env.CLAUDE_CODE_VERSION }}
+
+      - name: Install claude-code validator
+        if: steps.cache-claude-code.outputs.cache-hit != 'true'
+        run: npm install -g --prefix ~/.npm-global @anthropic-ai/claude-code@${{ env.CLAUDE_CODE_VERSION }}
+
+      - name: Validate plugin schema (claude plugin validate)
+        run: |
+          export PATH="$HOME/.npm-global/bin:$PATH"
+          claude --version
+          bun run plugin:validate
+
+      # Runs the package `test` script so the flags CI uses and the flags a
+      # contributor gets from `bun run test` cannot drift apart.
+      - name: Run tests
+        run: bun run test
+
+  # Focused Windows gate for the skill scripts that reach for POSIX process and
+  # file primitives: peer-job-runner (#1243) and ce-babysit-pr's pr-snapshot
+  # (#1280). Not a full-suite matrix — POSIX lifecycle tests (fork/killpg/ps)
+  # stay on ubuntu-latest. This job runs the cross-platform fixtures under real
+  # win32, which is the only way to execute the msvcrt/ctypes branches at all:
+  # they are imported solely under sys.platform == "win32", so no amount of
+  # patching reaches them from Linux or Mac.
+  windows-native:
+    runs-on: windows-latest
+    # Green runs finish in about 90 seconds. The Windows smoke step below buffers
+    # its output to a file and can hang with nothing printed when a detached
+    # supervisor never exits (2026-09-14, PR #1711 run 34909130752: 25+ minutes
+    # stuck, unresponsive to cancel and force-cancel). Fail well before GitHub's
+    # 6-hour default so the babysit loop can see it and rerun; 10 minutes still
+    # covers the smoke step's three-attempt ctypes retry.
+    timeout-minutes: 10
+
+    steps:
+      # Keep LF in the working tree so newline-anchored parity regexes match.
+      # Default Windows runners often have core.autocrlf=true (see
+      # docs/solutions/developer-experience/windows-crlf-checkout-breaks-newline-anchored-tests.md).
+      - name: Disable autocrlf for LF checkout
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          # Match the verified Windows smoke environment for #1243.
+          python-version: "3.11"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Peer-job-runner unit fixture
+        # Use `python`, never `python3` — on Windows the latter is often the
+        # Microsoft Store stub (see docs/solutions/conventions/resolve-python-interpreter-not-python3.md).
+        run: python tests/fixtures/peer-job-runner-unit.py
+
+      - name: Peer-job-runner Windows smoke
+        # Hosted windows-latest Python intermittently fails `import ctypes`
+        # mid-suite (DLL init on _ctypes) after earlier tests already passed.
+        # Product code cannot recover. Retries are signature-gated: only
+        # `DLL load failed while importing _ctypes` is retried; any other
+        # nonzero exit fails this step immediately. A retried attempt's log is
+        # suppressed so a green step never shows failure dumps; the full log
+        # prints on success and on the terminal failure.
+        shell: pwsh
+        run: |
+          $max = 3
+          for ($i = 1; $i -le $max; $i++) {
+            $log = Join-Path $env:TEMP "peer-job-runner-windows-smoke-$i.log"
+            python tests/fixtures/peer-job-runner-windows-smoke.py *> $log
+            $code = $LASTEXITCODE
+            $text = Get-Content -Raw -ErrorAction SilentlyContinue $log
+            if (($code -eq 0) -or ($text -notmatch 'DLL load failed while importing _ctypes') -or ($i -eq $max)) {
+              if ($null -ne $text) { Write-Host $text }
+              exit $code
+            }
+            Write-Host "Windows smoke hit known _ctypes flake (attempt $i/$max, exit $code); output suppressed, retrying"
+            Start-Sleep -Seconds 15
+          }
+
+      - name: Peer-job-runner parity
+        run: bun test tests/peer-job-runner-parity.test.ts
+
+      - name: pr-snapshot platform primitives
+        run: python tests/fixtures/pr-snapshot-platform.py
+
+      # Runs the scratch-root preamble exactly as the skills ship it, under Git Bash. The
+      # POSIX suite cannot cover this: `install -d -m 700` works there and fails only here
+      # (#1285), so a shape assertion stayed green while every skill's scratch setup aborted
+      # on Windows. Shell out via bun so the same file also runs in the ubuntu suite.
+      - name: Scratch-root preamble executes under Git Bash
+        run: bun test tests/scratch-root-preamble-executes.test.ts

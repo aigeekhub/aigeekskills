@@ -1,0 +1,355 @@
+/**
+ * One eval cell: extract skills/<name> from a git ref and run the same
+ * prompt on the host CLIs that are installed.
+ *
+ *   bun run test:skill-eval-cell -- --skill ce-debug --task "mode:pipeline …"
+ *
+ * Does not run in default `bun test` / CI. Missing CLIs skip.
+ */
+import { spawn, spawnSync } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import { arg, flag } from "./cli"
+import { REPO_ROOT, WORKTREE_REF, extractSkill, mintCellDir } from "./extract"
+import { HOSTS, planHost, resolveRunHosts, wrapPrompt, type Host, type HostPlan } from "./hosts"
+import { installPathShims, type PathShim } from "./path-shim"
+import { fingerprint, prepareOutput, sealEvidence, sha256, writeJSON } from "./provenance"
+
+function parseHosts(): Host[] | undefined {
+  const raw = arg("--hosts")
+  if (raw === undefined) return undefined
+  if (!raw) {
+    console.error("usage: --hosts claude,codex,grok,opencode")
+    process.exit(2)
+  }
+  const wanted = raw.split(",").map((s) => s.trim()).filter(Boolean) as Host[]
+  for (const host of wanted) {
+    if (!HOSTS.includes(host)) {
+      console.error(`unknown host ${host} (want ${HOSTS.join(", ")})`)
+      process.exit(2)
+    }
+  }
+  return wanted
+}
+
+function copyFixture(src: string, dest: string) {
+  fs.cpSync(src, dest, { recursive: true })
+}
+
+function snapshotWorkspace(hostDir: string, workspace: string, seedSha: string) {
+  const git = (args: string[]) =>
+    spawnSync("git", args, { cwd: workspace, encoding: "utf8" })
+  const status = git(["status", "--porcelain"])
+  const log = git(["log", "--oneline", "-5"])
+  fs.writeFileSync(
+    path.join(hostDir, "git-status.txt"),
+    status.status === 0 ? status.stdout : `(not a git repo)\n${status.stderr}`,
+  )
+  fs.writeFileSync(
+    path.join(hostDir, "git-log.txt"),
+    log.status === 0 ? log.stdout : `(no git log)\n${log.stderr}`,
+  )
+  const list = spawnSync("find", [".", "-path", "./.git", "-prune", "-o", "-type", "f", "-print"], {
+    cwd: workspace,
+    encoding: "utf8",
+  })
+  fs.writeFileSync(path.join(hostDir, "files.txt"), list.stdout)
+  // What the run itself committed, across however many commits it made -- not what
+  // the seed already tracked, and not merely HEAD's own changeset.
+  // Every commit in the range, not the endpoint diff: a secret committed and then
+  // removed in a follow-up commit is still in history and still pushable.
+  const headFiles = seedSha
+    ? git(["log", "--name-only", "--pretty=format:", `${seedSha}..HEAD`])
+    : git(["ls-tree", "-r", "--name-only", "HEAD"])
+  fs.writeFileSync(
+    path.join(hostDir, "git-head-files.txt"),
+    headFiles.status === 0 ? headFiles.stdout : "",
+  )
+}
+
+/** Detached children outlive the parent's own SIGINT/SIGHUP, so the cell kills them itself. */
+const liveHosts = new Set<number>()
+function killGroup(pid: number) {
+  try {
+    process.kill(-pid, "SIGKILL")
+  } catch {
+    // group already gone
+  }
+}
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.on(signal, () => {
+    for (const pid of liveHosts) killGroup(pid)
+    process.exit(130)
+  })
+}
+process.on("exit", () => {
+  for (const pid of liveHosts) killGroup(pid)
+})
+
+async function runPlan(
+  plan: HostPlan,
+  cwd: string,
+  timeoutMs: number,
+): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+  return new Promise((resolve) => {
+    const stdin = fs.openSync("/dev/null", "r")
+    // detached makes the child a process-group leader so a timeout can take down
+    // everything it spawned -- a host CLI's own subagents and detached peer jobs
+    // would otherwise keep running, billing, and writing after the cell reported.
+    const child = spawn(plan.argv[0], plan.argv.slice(1), {
+      cwd,
+      env: plan.env,
+      stdio: [stdin, "pipe", "pipe"],
+      detached: true,
+    })
+    if (child.pid) liveHosts.add(child.pid)
+    let timedOut = false
+    const killTree = () => {
+      if (child.pid) killGroup(child.pid)
+      try {
+        child.kill("SIGKILL")
+      } catch {
+        // already gone
+      }
+    }
+    let stdout = ""
+    let stderr = ""
+    // Both output streams are explicitly piped above; numeric stdin prevents overload narrowing.
+    child.stdout!.on("data", (c) => {
+      stdout += c.toString()
+    })
+    child.stderr!.on("data", (c) => {
+      stderr += c.toString()
+    })
+    let backstop: ReturnType<typeof setTimeout> | undefined
+    const timer = setTimeout(() => {
+      timedOut = true
+      killTree()
+      // Resolve on close so the snapshot runs after the tree is gone; the backstop
+      // covers a child whose pipes never close.
+      backstop = setTimeout(() => {
+        killTree()
+        if (child.pid) liveHosts.delete(child.pid)
+        resolve({ exitCode: null, stdout, stderr, timedOut: true })
+      }, 5000)
+    }, timeoutMs)
+    child.on("close", (code) => {
+      clearTimeout(timer)
+      if (backstop) clearTimeout(backstop)
+      if (child.pid) liveHosts.delete(child.pid)
+      try {
+        fs.closeSync(stdin)
+      } catch {
+        // already closed
+      }
+      resolve({ exitCode: timedOut ? null : code, stdout, stderr, timedOut })
+    })
+    child.on("error", (err) => {
+      clearTimeout(timer)
+      if (backstop) clearTimeout(backstop)
+      if (child.pid) liveHosts.delete(child.pid)
+      resolve({ exitCode: null, stdout, stderr: `${stderr}\n${String(err)}`, timedOut })
+    })
+  })
+}
+
+async function main() {
+  const skill = arg("--skill")
+  const task = arg("--task")
+  const taskFile = arg("--task-file")
+  if (!skill) {
+    console.error(
+      "usage: bun run test:skill-eval-cell -- --skill <name> --task \"...\" [--task-file p] [--ref WORKTREE|<git-ref>] [--hosts claude,codex,grok] [--fixture dir] [--out dir] [--timeout-secs 600] [--read-only] [--git-init] [--git-untracked p,p] [--git-staged p,p] [--shim-git-push] [--shim-gh-pr]\n       default --hosts is the other two harnesses from this session; missing CLIs warn and continue",
+    )
+    process.exit(2)
+  }
+  const taskText = taskFile ? fs.readFileSync(taskFile, "utf8") : task
+  if (!taskText) {
+    console.error("pass --task or --task-file")
+    process.exit(2)
+  }
+
+  const ref = arg("--ref", WORKTREE_REF) ?? WORKTREE_REF
+  const timeoutMs = Number(arg("--timeout-secs", "600")) * 1000
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("--timeout-secs must be positive and finite")
+  const readOnly = flag("--read-only")
+  const resolution = resolveRunHosts({ explicit: parseHosts() })
+  for (const line of resolution.warnings) console.error(line)
+  const hosts = resolution.run
+  if (hosts.length === 0) {
+    console.error(`error: no harness CLIs on PATH (wanted ${resolution.wanted.join(", ")})`)
+    process.exit(2)
+  }
+
+  const out = prepareOutput(arg("--out") ?? mintCellDir())
+  fs.writeFileSync(path.join(out, "task.md"), taskText, { flag: "wx" })
+  const sourceRev = spawnSync("git", ["rev-parse", "--verify", `${ref === WORKTREE_REF ? "HEAD" : ref}^{commit}`], {
+    cwd: REPO_ROOT, encoding: "utf8",
+  })
+  if (ref !== WORKTREE_REF && sourceRev.status !== 0) throw new Error(`cannot resolve ref: ${ref}`)
+  const resolvedRef = ref === WORKTREE_REF ? ref : sourceRev.stdout.trim()
+  const { skillDir } = extractSkill({ skill, ref: resolvedRef, dest: path.join(out, "extract") })
+  const workspace = path.join(out, "workspace")
+  const fixture = arg("--fixture")
+  if (fixture) copyFixture(fixture, workspace)
+  else fs.mkdirSync(workspace, { recursive: true })
+  if (flag("--git-init") && !fs.existsSync(path.join(workspace, ".git"))) {
+    spawnSync("git", ["init", "-b", "main"], { cwd: workspace })
+    spawnSync("git", ["config", "user.name", "CE skill-eval-cell"], { cwd: workspace })
+    spawnSync("git", ["config", "user.email", "skill-eval-cell@example.test"], { cwd: workspace })
+    const untracked = (arg("--git-untracked") ?? "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean)
+    // Staged paths are held out of the seed commit, then re-added, so they land as a
+    // staged-but-uncommitted change. A cell whose skill scopes a diff needs this:
+    // untracked paths are out of scope unless staged, so --git-untracked alone
+    // produces an empty reviewed set.
+    const staged = (arg("--git-staged") ?? "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean)
+    spawnSync("git", ["add", "."], { cwd: workspace })
+    for (const rel of [...untracked, ...staged]) {
+      spawnSync("git", ["rm", "-f", "--cached", "--ignore-unmatch", "--", rel], { cwd: workspace })
+    }
+    spawnSync("git", ["commit", "-m", "seed", "--allow-empty"], { cwd: workspace })
+    for (const rel of staged) {
+      spawnSync("git", ["add", "--", rel], { cwd: workspace })
+    }
+  }
+  const seedRev = spawnSync("git", ["rev-parse", "HEAD"], { cwd: workspace, encoding: "utf8" })
+  const seedSha = seedRev.status === 0 ? seedRev.stdout.trim() : ""
+  if (flag("--git-remote") && seedSha) {
+    // A fake origin whose main is the seed commit: the shipping tail sees no pre-existing
+    // unpushed commits and takes the push/PR path, where the push shim then fails.
+    spawnSync("git", ["remote", "add", "origin", "https://example.invalid/eval.git"], { cwd: workspace })
+    spawnSync("git", ["update-ref", "refs/remotes/origin/main", seedSha], { cwd: workspace })
+    spawnSync("git", ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"], { cwd: workspace })
+  }
+
+  writeJSON(path.join(out, "input-manifest.json"), {
+    schema_version: 1,
+    started_at: new Date().toISOString(),
+    requested_ref: ref,
+    source_commit: sourceRev.status === 0 ? sourceRev.stdout.trim() : null,
+    source_commit_is_skill_identity: ref !== WORKTREE_REF,
+    skill: fingerprint(skillDir),
+    initial_workspace: fingerprint(workspace),
+    task_sha256: sha256(taskText),
+    harness: fingerprint(import.meta.dir, fs.readdirSync(import.meta.dir).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))),
+    runtime: { bun: Bun.version, node: process.version, platform: process.platform, arch: process.arch },
+    timeout_ms: timeoutMs,
+    read_only: readOnly,
+    git_init: flag("--git-init"), git_remote: flag("--git-remote"),
+    git_untracked: arg("--git-untracked") ?? null, git_staged: arg("--git-staged") ?? null,
+    requested_model: null,
+    observed_model: null,
+    limits: ["model/configuration inherited from host; not captured", "provider state and external resources are not frozen", ".git internals and symlink target contents are not hashed"],
+  }, true)
+
+  const summary: Record<string, unknown> = {
+    skill,
+    ref,
+    out,
+    skillDir,
+    workspace,
+    current_harness: resolution.current,
+    hosts_wanted: resolution.wanted,
+    hosts_run: hosts,
+    hosts_skipped: resolution.skipped,
+    own_eval_only: resolution.ownEvalOnly,
+    warnings: resolution.warnings,
+    read_only: readOnly,
+    seed_sha: seedSha,
+    cells: {},
+  }
+
+  writeJSON(path.join(out, "summary.json"), summary)
+  for (const host of hosts) {
+    const hostDir = path.join(out, "hosts", host)
+    const hostWorkspace = path.join(hostDir, "workspace")
+    const hostSkillDir = path.join(hostDir, "skill")
+    fs.mkdirSync(hostDir, { recursive: true })
+    copyFixture(workspace, hostWorkspace)
+    // Script imports can create caches. Keep the input snapshot unchanged and
+    // give every host its own execution copy, included in the sealed evidence.
+    fs.cpSync(skillDir, hostSkillDir, { recursive: true })
+    const hostPrompt = wrapPrompt({ skillDir: hostSkillDir, workspace: hostWorkspace, task: taskText })
+    const promptFile = path.join(hostDir, "prompt.md")
+    fs.writeFileSync(promptFile, hostPrompt)
+    const plan = planHost(host, {
+      cwd: hostWorkspace,
+      prompt: hostPrompt,
+      promptFile,
+      readOnly,
+    })
+    const shims: PathShim[] = []
+    if (flag("--shim-git-push")) {
+      const requiredHeadMarker = arg("--shim-git-push-requires-head-marker")
+      shims.push(
+        requiredHeadMarker
+          ? {
+              bin: "git",
+              subcommand: "push",
+              exitCode: 1,
+              stderr: "fatal: no configured remote",
+              precondition: { kind: "git-head-marker", path: requiredHeadMarker },
+            }
+          : {
+              bin: "git",
+              subcommand: "push",
+              exitCode: 1,
+              stderr: "fatal: no configured remote",
+            },
+      )
+    }
+    if (flag("--shim-gh-pr")) {
+      shims.push({
+        bin: "gh",
+        subcommand: "pr",
+        exitCode: 1,
+        stderr: "error: GitHub API failed (simulated unknown PR state)",
+      })
+    }
+    if (shims.length > 0) Object.assign(plan.env, installPathShims(hostDir, shims))
+    fs.writeFileSync(path.join(hostDir, "argv.json"), `${JSON.stringify(plan.argv, null, 2)}\n`)
+    fs.writeFileSync(path.join(hostDir, "notes.txt"), `${plan.notes.join("\n")}\n`)
+    const cli = Bun.which(plan.argv[0])
+    const version = cli ? spawnSync(cli, ["--version"], {
+      env: plan.env, cwd: hostWorkspace, encoding: "utf8", timeout: 5000, maxBuffer: 8192,
+    }) : null
+    writeJSON(path.join(hostDir, "runtime.json"), {
+      executable: cli,
+      version: version?.status === 0 ? version.stdout.trim().slice(0, 1024) : null,
+      version_probe_ok: version?.status === 0,
+      requested_model: null,
+      observed_model: null,
+    }, true)
+    const result = await runPlan(plan, hostWorkspace, timeoutMs)
+    fs.writeFileSync(path.join(hostDir, "stdout.txt"), result.stdout)
+    fs.writeFileSync(path.join(hostDir, "stderr.txt"), result.stderr)
+    fs.writeFileSync(
+      path.join(hostDir, "exit.json"),
+      `${JSON.stringify({ exitCode: result.exitCode, timedOut: result.timedOut }, null, 2)}\n`,
+    )
+    snapshotWorkspace(hostDir, hostWorkspace, seedSha)
+    ;(summary.cells as Record<string, unknown>)[host] = {
+      exitCode: result.exitCode,
+      timedOut: result.timedOut,
+      stdout_bytes: Buffer.byteLength(result.stdout),
+      stderr_bytes: Buffer.byteLength(result.stderr),
+      process_outcome: result.timedOut ? "timeout" : result.exitCode === 0 ? "completed" : "nonzero-or-spawn-error",
+    }
+    writeJSON(path.join(out, "summary.json"), summary)
+  }
+
+  const summaryPath = path.join(out, "summary.json")
+  sealEvidence(out)
+  console.log(summaryPath)
+}
+
+main().catch((err) => {
+  console.error(err)
+  process.exit(1)
+})
