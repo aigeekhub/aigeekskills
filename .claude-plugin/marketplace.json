@@ -1,0 +1,48 @@
+{
+  "name": "aigeekskills",
+  "owner": {
+    "name": "FENIX DIGITAL ENTERPRISE LLC",
+    "url": "https://github.com/aigeekhub"
+  },
+  "metadata": {
+    "description": "Consolidated, editable Claude Code skills for the FENIX SHIP LOOP. Matt Pocock, Compound Engineering, and pstack imported whole via git subtree; the 13 Lane C skills carry FENIX autonomous-mode edits for unattended /lfg-style runs. See NOTICE.md for upstream attribution.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "mattpocock",
+      "description": "Matt Pocock's agent skills for real engineering: grilling, spec/ticket flows, TDD, code review, domain modelling. grill-with-docs and tdd carry FENIX autonomous-mode edits.",
+      "author": {
+        "name": "Matt Pocock",
+        "url": "https://www.aihero.dev"
+      },
+      "homepage": "https://github.com/mattpocock/skills",
+      "tags": ["engineering", "skills", "tdd", "code-review", "grilling", "fenix-autonomous"],
+      "source": "./skills/mattpocock"
+    },
+    {
+      "name": "compound-engineering",
+      "description": "AI-powered development tools for code review, research, design, and workflow automation. ce-plan, ce-work, ce-simplify-code, ce-code-review, ce-commit-push-pr, and ce-compound carry FENIX autonomous-mode edits.",
+      "author": {
+        "name": "Kieran Klaassen",
+        "url": "https://github.com/kieranklaassen",
+        "email": "kieran@every.to"
+      },
+      "homepage": "https://github.com/EveryInc/compound-engineering-plugin",
+      "tags": ["ai-powered", "compound-engineering", "workflow-automation", "code-review", "quality", "fenix-autonomous"],
+      "source": "./skills/compound-engineering/plugins/compound-engineering"
+    },
+    {
+      "name": "pstack",
+      "description": "Rigorous agent workflows: verification, adversarial multi-model review, principles. poteto-mode, interrogate, blast-radius, create-verification-skill, and babysit carry FENIX autonomous-mode edits.",
+      "author": {
+        "name": "Michael Denyer",
+        "email": "mdenyer@gmail.com",
+        "url": "https://github.com/michael-denyer"
+      },
+      "homepage": "https://github.com/michael-denyer/pstack-claude",
+      "tags": ["pstack", "poteto-mode", "workflow", "principles", "verification", "fenix-autonomous"],
+      "source": "./skills/pstack/plugins/pstack"
+    }
+  ]
+}
