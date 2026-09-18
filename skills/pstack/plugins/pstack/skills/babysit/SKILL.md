@@ -43,6 +43,24 @@ Inside poteto-mode, the **Babysit** playbook ([`../poteto-mode/playbooks/babysit
 
 5. **Report.** Summarize fixes applied, comments addressed, comments deferred (with reason), current PR status. Cite each commit by SHA.
 
+## Autonomous mode
+
+Two points above touch blocking. When `scripts/trail.sh check` reports autonomous mode on, they
+resolve differently, on purpose:
+
+**Step 4's design-choice pause** ("the next fix would force a design choice → pause... with
+`AskUserQuestion`") resolves per Rule 1: do not pause the whole loop over one contested point. Leave
+that specific fix undone, log it via `scripts/trail.sh write` (`reversible=yes` — nothing was
+changed), note it plainly in the Step 5 report, and keep triaging everything else on the PR that
+doesn't hinge on that choice. A babysit run that stalls entirely because one comment needed judgment
+defeats the point of running it unattended.
+
+**The Hard rules' force-push and rebase clearance stays exactly as written, unchanged.** History
+rewrites on a shared branch are Rule 4 territory — the doctrine's own Section 2's list names
+`git push --force`, `reset --hard`, and history rewrites explicitly, and they never yield to
+autonomy. If a fix genuinely needs one, stop and report it as blocked on a human, the same as the
+skill already does today.
+
 ## Hard rules
 
 - Don't rewrite history on a branch others may have pulled. If a rebase or force-push looks necessary, clear it with the user first.

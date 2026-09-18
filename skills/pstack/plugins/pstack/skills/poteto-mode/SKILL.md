@@ -89,6 +89,19 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 
 **No is an acceptable answer.** Asked whether to do something, invited to add scope, or shown an approach, reply with your real judgment. Decline, push back, or say "this doesn't earn its place" when true. A recommendation is a judgment, not a validation. Agreement is not the default, candor over sycophancy.
 
+**FENIX integration.** This section is already substantially FENIX-AUTONOMOUS.md's doctrine, written
+independently and, on candor, better. No duplicate logic was added. Two integration points only:
+
+- Add `scripts/trail.sh check` reporting on to the Session overrides trigger list above, so a
+  FENIX-activated repo (`autonomous: on` in config, or `FENIX_AUTONOMOUS=1`) is treated the same as
+  "run until done" here, without a second detection mechanism.
+- **show-me-your-work already satisfies FENIX-AUTONOMOUS.md section 3.** Both are a TSV, one row per
+  decision. Do not also write to `scripts/trail.sh` when show-me-your-work is active for this run —
+  that would be two logs claiming to be the audit trail. Use show-me-your-work as written.
+- The "Always pause" list above (force-push, deploys, data deletion, customer messages) is a subset
+  of FENIX-AUTONOMOUS.md Rule 4, which also names merging a PR, rotating or printing secrets, and
+  spending money. Treat Rule 4 as the superset when FENIX mode is active; nothing here is loosened.
+
 ## Subagents
 
 **Use `subagent_type: "pstack:poteto-agent"` for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). Plugin agents register under the plugin namespace; the bare name `poteto-agent` errors. `/poteto-mode` and `poteto-agent` route through the same wrapper. Routed workflow skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) set their own `subagent_type` for diverse-model review; respect what the skill prescribes, don't override to `poteto-agent`.

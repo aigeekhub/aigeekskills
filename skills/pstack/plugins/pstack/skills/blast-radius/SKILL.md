@@ -27,6 +27,19 @@ For each fact the change's safety depends on, get it as far down this list as is
 
 Any safety fact you can't get to step 4, say so. Don't write it up as settled. Step 4 is usually one small script that imports the same library the app ships and calls the exact function you're worried about.
 
+## Autonomous mode
+
+This skill has no blocking question anywhere in it — it is read-only investigation and proof by
+running code. Its "How sure are you" ladder above already implements FENIX-AUTONOMOUS.md Rule 3 more
+rigorously than the doctrine itself asks for a five-step scale versus a binary "proof or it didn't
+happen." No edit was needed for Rule 3, and none was made.
+
+The one FENIX addition: when `scripts/trail.sh check` reports autonomous mode on, log which step of
+the ladder the load-bearing fact reached — via `scripts/trail.sh write`, `reversible=yes` — right
+after "What to hand back" names it. An "unproven" result and a "reached step 4" result should both
+leave a row; the difference between them is exactly what a human auditing an overnight run needs to
+see at a glance without opening the full writeup.
+
 ## Steps
 
 1. Read the change. The diff, the symbols it adds, changes, and deletes, and what it now does differently, including the part the diff doesn't spell out. Use `why` step 2 to pull the PR and commits.

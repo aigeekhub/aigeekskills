@@ -21,6 +21,15 @@ Answer these from the codebase and only ask the user what you cannot observe:
 
 If the checkout doesn't build or start as-is, fix that first (or report it precisely) before generating; a skill written against a broken base teaches wrong steps. When an irrelevant missing asset blocks startup (a static dir the API never serves, a sample config), the generated skill may create it, clearly marked as verification scaffolding, and remove it in cleanup.
 
+**Autonomous mode.** This skill already asks the user only what it cannot observe — Rule 1's default
+of inferring from evidence is already the design. When `scripts/trail.sh check` reports autonomous
+mode on and even that irreducible question remains (a repo with several equally primary surfaces,
+say), resolve it per Rule 2: pick the surface with the most existing harness coverage already in the
+repo (Playwright specs, expect scripts, an existing debug port) over one with none, since driving an
+already-instrumented surface is the narrower, more reversible bet. Log the choice via
+`scripts/trail.sh write`, `reversible=yes` — the generated skill can always be pointed at a second
+surface later without undoing anything.
+
 ## 2. Generate the skill
 
 Write `.claude/skills/verify/SKILL.md` with YAML frontmatter (`name: verify` and a `description` that names the app, the surface, and when to reach for it — without frontmatter the skill never registers, and with `disable-model-invocation` the model cannot call it) and these sections, each grounded in what the interview actually found (no placeholders left):

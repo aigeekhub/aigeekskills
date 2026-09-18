@@ -32,6 +32,13 @@ Before spawning reviewers, state the intent explicitly. Derive this from:
 
 Write one clear paragraph. If you're unsure about the intent, ask the user before proceeding.
 
+**Autonomous mode.** When `scripts/trail.sh check` reports on, resolve intent from the sources
+already listed above — user message, commit messages, PR description, the code itself — in that
+order, rather than asking. State which source won in the paragraph itself, and log it via
+`scripts/trail.sh write` (`reversible=yes`; stating an intent commits nothing). This does not change
+the configured reviewer-panel size in `~/.claude/pstack-models.md` — autonomy resolves the one
+blocking question here, not the cost of running the panel.
+
 ## Step 3, Spawn Reviewers
 
 Launch all reviewers in a single message using the `Agent` tool. Use the `interrogate reviewers` list from `~/.claude/pstack-models.md` when present, one reviewer per entry, extending or shrinking the Reviewer A/B/C/D labels below to the configured entry count; otherwise use the table defaults.
