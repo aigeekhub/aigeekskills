@@ -7,6 +7,20 @@ description: Test-driven development. Use when the user wants to build features 
 
 TDD is the red → green loop. This skill is the reference that makes that loop produce tests worth keeping: what a good test is, where tests go, the anti-patterns, and the rules of the loop. Every section applies on every cycle: consult them before and during the loop, not after.
 
+## Autonomous mode
+
+The one blocking point below is "Seams: where tests go" — confirming seams with the user before
+writing a test. When `scripts/trail.sh check` reports autonomous mode on, resolve it without asking:
+use the TDD seam the plan already named for this unit (`ce-plan`'s Lane C instruction requires one
+per unit), since a human already reviewed and approved that plan before this autonomous run started
+— the confirmation already happened, upstream of this skill. Log which seam was used via
+`scripts/trail.sh write`, `reversible=yes`.
+
+If the plan named no seam for this unit, per Rule 2 pick the narrowest, most obviously public
+interface rather than guessing at something deep or speculative, and log that choice the same way.
+If even that is unclear, skip the test rather than write one at a guessed seam — an untested unit is
+recoverable; a wrong-seam test is a false confidence that outlives the run.
+
 When exploring the codebase, read `CONTEXT.md` (if it exists) so test names and interface vocabulary match the project's domain language, and respect ADRs in the area you're touching.
 
 ## What a good test is
