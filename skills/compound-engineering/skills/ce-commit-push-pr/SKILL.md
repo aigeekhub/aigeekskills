@@ -8,6 +8,22 @@ argument-hint: "[PR ref] [mode:pipeline] [archive:on|off] [branding:on|off] [bab
 
 **Asking the user:** use the host's blocking question tool already in the current tool list (match by capability, not by a host-specific name). Presence in the current tool list is proof the tool exists; never call a user-facing question tool to discover whether it exists. If a matching tool is listed but unloaded, use the host's tool-discovery primitive to load that capability — do not search for another host's tool name. Fall back to asking in chat only when no such tool is in the list or a real question call errors, and never silently skip the question.
 
+## Autonomous mode
+
+Before Step 1, run `scripts/trail.sh check`. When it reports autonomous mode on and the invocation
+did not already carry `mode:pipeline`, treat it as if it had: this skill already suppresses every
+blocking ask under that mode with exactly the conservative defaults Rule 2 calls for (no existing-PR
+rewrite, keep the branch, stop on an unresolvable base rather than guess). No new default logic was
+added; FENIX autonomous mode is wired to reuse it. Log each suppressed ask via `scripts/trail.sh
+write`, `reversible=yes` for the branch/description defaults, `reversible=no` for a stopped
+unresolvable-base case (it blocks the run, which the PR description should explain).
+
+**On Rule 4, read carefully:** pushing a branch and opening a PR is not the irreversible action Rule
+4 forbids — it is exactly the artifact an autonomous run is supposed to produce
+(FENIX-AUTONOMOUS.md section 4: "an open PR... No merge. Ever."). This skill already never merges.
+Do not read Rule 4 as a reason to withhold the push or the PR; withhold only a force-push, a history
+rewrite, or the merge itself, none of which this skill does.
+
 ## Mode
 
 - **Description-only** — the user wants *just* a description ("write/draft a PR description", "describe this PR", a pasted PR URL or number). Run Step 4 only and print it. Apply it only if asked. Pass any pasted PR ref so Pre-A resolves the range.

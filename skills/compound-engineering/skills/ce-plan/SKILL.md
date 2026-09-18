@@ -20,6 +20,22 @@ A run is complete when its output contract's done condition is met. Every normal
 
 Writing the file, checking confidence, and running or explicitly skipping `ce-doc-review` are intermediate milestones. In pipeline mode, the run is complete only when the plan, the confidence check, and the non-interactive document-review state have been returned to the caller, which decides what happens next.
 
+## Autonomous mode
+
+Before Phase 0, run `scripts/trail.sh check`. When it reports autonomous mode on, treat this run as
+this skill's own existing **pipeline mode** (see `references/output-mode.md`) for every branch that
+would otherwise block: Output Contract selection, depth classification, and the Phase 5.4 handoff
+menu all resolve to their pipeline-mode path rather than asking. This reuses upstream's own
+non-interactive machinery instead of adding a second one beside it.
+
+What pipeline mode does not give you is an audit trail. Per FENIX-AUTONOMOUS.md section 3, log one
+row via `scripts/trail.sh write` for each resolved-without-asking decision — the Output Contract
+tier picked, the depth classification, and any scope call-out the interactive path would have
+surfaced. Per Rule 2, when a call is genuinely unclear, prefer the lighter contract (Chat brief over
+Durable) and the narrower scope; both are easy to widen later, and widening a plan is cheaper than
+unwinding a plan that assumed too much. `reversible=yes` for all of these — a plan document is never
+itself an irreversible action. When autonomous mode is off, this section does not apply.
+
 ## Interaction Method
 
 Ask one question at a time through the host's blocking question tool already in the current tool list. Match by capability; never probe a user-facing tool to discover it. If none is listed or a real question call errors, render numbered choices in chat; never silently skip a required question. If no feature description was supplied, ask what to plan and wait.

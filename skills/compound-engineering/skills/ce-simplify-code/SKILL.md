@@ -7,6 +7,16 @@ argument-hint: "[blank to simplify current branch changes, or describe what to s
 Simplify recently changed code for clarity, reuse, quality, and efficiency while preserving exact behavior. Prioritize readable, explicit code over compact code — fewer lines is not the goal.
 
 
+## Autonomous mode
+
+This skill has exactly one blocking point: Step 1's "stop and ask the user what to simplify" when no
+scope resolves. When `scripts/trail.sh check` reports autonomous mode on, treat an empty scope the
+same as the Preflight no-substantive-code case — report nothing to simplify and stop, rather than
+ask or invent a scope. Per Rule 2, declining to guess a scope is the reversible choice; picking one
+arbitrarily is not. Log the empty-scope outcome via `scripts/trail.sh write`, `reversible=yes`. Every
+other decision in this skill already resolves without asking (Step 3's skip-without-asking rule),
+so no further edit was needed.
+
 ## Step 1: Identify scope
 
 Resolve the simplification scope in this order:

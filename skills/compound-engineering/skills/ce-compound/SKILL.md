@@ -27,6 +27,21 @@ An existing learning that became materially inaccurate or incomplete qualifies b
 
 `ce-compound` does not bootstrap `CONCEPTS.md`. It seeds the learning's own area as a side effect, never the whole repo. Send a standalone request to create or bootstrap that file to `ce-compound-refresh`, then exit.
 
+## Autonomous mode
+
+Before Mode Detection, run `scripts/trail.sh check`. When it reports autonomous mode on and the
+invocation did not already carry `mode:non-interactive`, treat it as if it had — this skill's
+non-interactive path already asks nothing, in any phase, which is Rule 1 already satisfied by
+upstream. The interactive-only side effects (Discoverability Check consent, the Compound Pack and
+`config.yaml` writes at the assembly destination step) already do not fire outside interactive mode,
+which is Rule 2's narrower-and-reversible default already correct as written. No override was
+needed for either.
+
+What autonomy adds: log the durable-bar counterfactual verdict — write or skip, and why — via
+`scripts/trail.sh write`, `reversible=yes`. This is the one judgment call in this skill worth a
+human being able to audit later, since "nothing was written" and "something should have been
+written but wasn't" look identical from the outside without a trail row explaining which happened.
+
 ## Mode Detection
 
 ```bash

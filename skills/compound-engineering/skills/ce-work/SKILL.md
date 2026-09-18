@@ -13,6 +13,32 @@ argument-hint: "[Plan path, work description, or recovery request with run id; b
 - **Done:** Every in-scope task is complete, required verification evidence is recorded, relevant checks pass, and the run reaches either its owned shipping handoff (with a code-review receipt or explicit skip phrase — see Phase 3-4), a complete return result, or an explicit blocker.
 - **Intent:** Finish the requested feature without renegotiating the plan or transferring canonical integration authority. Workers receive bounded units; the host orchestrator inspects actual changes and owns authoritative verification and canonical commits.
 
+## Autonomous mode
+
+Before Phase 0, run `scripts/trail.sh check`. When it reports autonomous mode on, two specific
+blocking points below change; nothing else in this skill is overridden.
+
+**Phase 1's dirty-file question.** When a unit needs a file that was already dirty, standalone mode
+normally asks once whether to include or exclude it. Per Rule 2, default to **exclude**: the unit
+proceeds without that file, and the exclusion is logged via `scripts/trail.sh write`
+(`reversible=yes` — nothing was committed that can't be added back next run) rather than asked.
+
+**Everything else that is a genuine judgment call and not already covered by a Rule** (a settled
+decision `implementation-loop.md` would otherwise ask about, an ambiguous plan-clarification point
+in `workspace-setup.md`) resolves to the documented default and gets one trail row, per Rule 1.
+
+**What is deliberately NOT overridden:** Phase 0's recovery run-id resolution ("If the run id is
+missing, ask for it; never guess one") stays absolute. Guessing the wrong run risks mutating or
+recovering the wrong work, which Rule 4 treats as not worth the risk regardless of autonomy. If the
+run id is missing and autonomous mode is on, stop this unit cleanly, log why via
+`scripts/trail.sh write` with `reversible=no`, and surface it in the PR description per
+FENIX-AUTONOMOUS.md section 4 — do not guess, and do not block waiting on a human either.
+
+This skill already does most of doctrine section 3's work for you: the code-review completion gate
+(Phase 3-4) already refuses to report done without a receipt, which is Rule 3's proof requirement
+enforced structurally, and Return-to-Caller Mode is already architected for orchestrator-driven
+chaining. No edit was needed for either.
+
 ## Execution Workflow
 
 **Bundled references must be read, never approximated.** Resolve each reference or script path named below from this skill's loaded `SKILL.md` directory, using the full skill path the harness supplied, and never glob the target repository to find a bundled file. Read each reference when you enter the phase it governs; a read made before that phase does not satisfy it, and a reference this file says to read again is read again at its step even when already in context. If the harness does not expose the skill directory, or a required file cannot be read, stop before the action it governs and report which file is missing. Do not reconstruct its rules from memory; report the missing reference instead of continuing natively.
