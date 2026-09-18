@@ -30,7 +30,7 @@
       },
       "homepage": "https://github.com/EveryInc/compound-engineering-plugin",
       "tags": ["ai-powered", "compound-engineering", "workflow-automation", "code-review", "quality", "fenix-autonomous"],
-      "source": "./skills/compound-engineering/plugins/compound-engineering"
+      "source": "./skills/compound-engineering"
     },
     {
       "name": "pstack",
