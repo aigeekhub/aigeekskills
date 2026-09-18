@@ -130,6 +130,8 @@ An autonomous run finishes with:
   skill current and re-check the feature map after upstream changes.
 - Cross-model review may send diffs to another vendor. That is a per-repo setting, not an autonomy
   setting. Client repos stay off.
-- These forks diverge from upstream. Every skill here keeps its upstream body intact below the
-  override block precisely so `git merge upstream/main` stays tractable. Do not restructure upstream
-  content. Add, override, and leave the rest alone.
+- These skills are edited in place, imported via `git subtree` rather than a wrapper layer. Each
+  edit is a small `## Autonomous mode` section inserted after the frontmatter, with the upstream
+  body left otherwise untouched — that discipline is what keeps `git subtree pull` tractable later.
+  Only 13 of the ~131 imported skills carry this edit; a future conflict on `sync-upstream.sh` can
+  only ever land in one of those 13. Do not restructure upstream content beyond that one section.
