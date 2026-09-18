@@ -10,6 +10,20 @@ Help the caller deliver a correct change within the agreed scope. Find defects a
 
 **Done when:** required review and validation are complete, retained findings are supported by the source, and the caller has a clear result with any remaining coverage limits. Apply only when the invocation authorizes it, under the rules below.
 
+## Autonomous mode
+
+This skill already satisfies FENIX-AUTONOMOUS.md Rules 1 and 4 unconditionally, not just under
+autonomy: it never blocks with a question ("Operating principles" above), never pushes, opens a PR,
+or mutates the branch in any mode. No edit was needed for those rules, and none was made.
+
+What autonomy adds is the decision trail (doctrine section 3). When `scripts/trail.sh check`
+reports autonomous mode on, log one row via `scripts/trail.sh write` for each of this run's
+non-obvious calls, right after making them: which reviewer personas Stage 3 selected and why, whether
+Stage 3d started or skipped the cross-model peer, and any coverage gap the report notes instead of
+asking. All of these are reversible (`reversible=yes`) — a review run does not touch the tree by
+default. Use `ce-code-review` as the `skill` field. When autonomous mode is off, skip this
+paragraph entirely; the skill's own behavior is already unchanged either way.
+
 ## Artifact Root
 
 <!-- ce-docs-root:start -->
