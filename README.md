@@ -26,6 +26,11 @@ Autonomous mode is **off by default**. A repo turns it on with a line `autonomou
 
 ## Install
 
+There are two ways to use these skills. They differ in what you type.
+
+**A. As plugins (any machine).** Commands are namespaced by plugin, for example
+`/compound-engineering:ce-plan`, `/mattpocock:tdd`, `/pstack:tdd`.
+
 ```
 claude plugin marketplace add aigeekhub/aigeekskills
 claude plugin install mattpocock@aigeekskills
@@ -33,17 +38,40 @@ claude plugin install compound-engineering@aigeekskills
 claude plugin install pstack@aigeekskills
 ```
 
-## Pulling upstream updates
+Plugins load when a session starts, so restart Claude Code after installing. If `marketplace add`
+fails with `unable to rename temporary '*.idx' file`, your machine's git cannot finish writing pack
+indexes (an antivirus or file-lock problem, not this repo). Clone the repo some other way and add the
+local path instead: `claude plugin marketplace add <path-to-your-clone>`.
+
+**B. As loose skills (keeps bare names like `/ce-plan` and `/tdd`).** Compound Engineering and Matt
+Pocock skills are self-contained, so each can be linked into `~/.claude/skills`. pstack cannot: it
+needs its plugin hook and agents, so it stays a plugin (`/pstack:<name>`).
 
 ```
-scripts/sync-upstream.sh mattpocock
-scripts/sync-upstream.sh compound-engineering
-scripts/sync-upstream.sh pstack
+scripts/link-install.sh            # dry run: shows exactly what would change
+scripts/link-install.sh --apply    # moves anything in the way to a dated backup, then links
+scripts/link-install.sh --rollback <dir printed by --apply>
 ```
 
-Each wraps `git subtree pull`. A pull refuses to run on a dirty tree, and any conflict will only ever
-land in one of the 13 autonomy-edited files — the rest of each pack merges silently. After a clean
-pull, `scripts/verify-closure.sh` confirms nothing references a component this repo doesn't ship.
+Nothing is deleted. On Windows the links are junctions (symlinks need admin rights there). The tool
+refuses to `--apply` when the skills folder is itself a link or sits inside a git repository, because
+applying would rewrite that repository's files. Decide how that should fit first, then pass
+`--force-managed-target`.
+
+## Keeping it current
+
+```
+scripts/sync-upstream.sh status                 # pinned vs upstream, commits behind
+scripts/sync-upstream.sh mattpocock             # also: compound-engineering, pstack
+scripts/verify-closure.sh                       # nothing references a skill this repo does not ship
+```
+
+A pull wraps `git subtree pull`, refuses to run on a dirty tracked tree, and names every conflicting
+file as either `expected` (one of the 13 FENIX edits) or `UNEXPECTED`. It then runs the closure check.
+Upstream moves fast, so after a pull expect to review three things: new noise tokens for
+`scripts/closure-allowlist.txt` (each needs a written reason), skills moved or removed upstream
+(regenerate `scripts/closure-roster.txt` after reviewing), and any FENIX edit a merge dropped (the
+closure check fails loudly on that).
 
 ## License and attribution
 

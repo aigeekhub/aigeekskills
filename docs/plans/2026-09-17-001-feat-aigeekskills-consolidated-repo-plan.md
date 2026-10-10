@@ -372,3 +372,23 @@ Measured directly from the three cloned forks on 2026-09-17:
 - Skill dependency trees: 107 files across the 13, with `poteto-mode` alone at 58 files and 7
   subdirectories including a vendored `licenses/` folder.
 - Blocking points: 34 across the 13, with `ce-plan` and `ce-compound` already carrying headless paths.
+
+---
+
+## Post-build corrections (2026-10-10)
+
+The plan above was written from June-era reconnaissance. Building it against the live upstreams
+overturned several premises. The decisions stand; the reasons changed.
+
+| Plan said | What building found |
+|---|---|
+| KTD1 and R7: 43 external CE agents and 30+ outside components force a whole-pack import | CE went "agentless" in June 2026. Review personas and researchers are now prompt files inside each skill (`references/personas/`, `references/agents/`). Importing whole packs is still right, because each skill's private files must travel with it, but the 43 external agents no longer exist |
+| KTD2: CE plugin source is `plugins/compound-engineering` | CE restructured; the repo root is now the plugin. Manifest source corrected |
+| KTD3/U3/U4: skills run `scripts/trail.sh` and read `FENIX-AUTONOMOUS.md` | An installed plugin receives only its own subdirectory, so both were absent in any real install and the autonomous feature would silently do nothing. Found by a clean-room install. Fixed by generating one self-contained doctrine block into each of the 13 skills (`scripts/embed_doctrine.py`); `trail.sh` is now an optional helper |
+| U5: closure check walks agents and names | Personas are referenced by bare name, so a name scan was blind to them. The verifier now has five checks (tokens, relative links, manifests, a roster lock of 198 skill/agent/persona files, and a FENIX lock of the 13 edited skills) plus a reviewed allowlist |
+| U6: pin recorded in `PINS.txt` | The pin is the `git-subtree-split` trailer subtree already leaves on each squash commit, so nothing can drift |
+| U7: migrate off loose installs | `~/.claude/skills` is a junction into the AI_ECO git repository, so a naive migration would rewrite that repository. The link tool refuses by default. The cutover is an open decision, not a done step |
+
+Upstream had moved 74 (Matt), 70 (CE), and 148 (pstack) commits within three weeks of the import.
+A dry run of the real sync in a throwaway clone: Matt conflicts only in `tdd` (a FENIX edit); CE and
+pstack merge cleanly with all FENIX edits surviving.
