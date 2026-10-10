@@ -5,7 +5,7 @@
 #   scripts/sync-upstream.sh <pack> [--no-verify]       git subtree pull, then closure check
 #
 # Packs: see scripts/upstreams.txt. Conflicts can only land in files FENIX edited (the ones that
-# mention scripts/trail.sh); this script names them, and flags any conflict outside that set.
+# carry the fenix:doctrine marker); this script names them, and flags any conflict outside that set.
 #
 # Exit: 0 ok or already current | 2 usage | 3 dirty tree | 4 merge conflicts
 #       5 merged but closure check failed | 6 git or network failure
@@ -30,8 +30,8 @@ pinned_sha() { # prefix -> sha recorded by the most recent subtree squash commit
   git log -1 -E --grep="^git-subtree-dir: $1\$" --format=%B 2>/dev/null | sed -n 's/^git-subtree-split: //p' | head -1
 }
 
-edited_files() { # prefix -> files FENIX edited, one per line (those mentioning scripts/trail.sh)
-  git grep -l 'scripts/trail.sh' HEAD -- "$1" 2>/dev/null | sed 's/^HEAD://'
+edited_files() { # prefix -> files FENIX edited, one per line (those carrying the fenix:doctrine marker)
+  git grep -l 'fenix:doctrine:start' HEAD -- "$1" 2>/dev/null | sed 's/^HEAD://'
 }
 
 cmd_status() {

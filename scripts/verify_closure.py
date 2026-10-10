@@ -5,6 +5,9 @@ Fails when any shipped skill or agent points at something this repo does not shi
   token     a ce-* name, pstack:<name>, or Skill-tool quoted name that resolves to no skill or agent
   link      a relative markdown link whose target file does not exist
   manifest  a marketplace source, plugin.json, or plugin.json skill path that does not exist
+  roster    a skill, agent, or persona listed in closure-roster.txt that is gone from disk
+  fenix     a FENIX-edited skill whose embedded doctrine block is missing or stale, or that depends
+            on a repo-root file (scripts/trail.sh, FENIX-AUTONOMOUS.md) that does not ship in a plugin
 
 Known false positives (temp-file names, schema tokens, example paths) live in
 scripts/closure-allowlist.txt, one `kind|value|reason` per line. Anything not listed fails.
@@ -14,6 +17,9 @@ import os
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from embed_doctrine import check_embedded  # noqa: E402  (same directory)
 
 SKIP_DIRS = {"tests", "docs", "site", "node_modules", "fixtures", ".changeset", ".git"}
 SKIP_FILES = {"CHANGELOG.md"}
@@ -153,7 +159,7 @@ def run(root):
     allowed = load_allowlist(root / "scripts" / "closure-allowlist.txt")
     files, skills, agents = collect(root / "skills")
     used = set()
-    findings = check_text(files, skills, agents, allowed, root, used) + check_manifests(root) + check_roster(files, root)
+    findings = check_text(files, skills, agents, allowed, root, used) + check_manifests(root) + check_roster(files, root) + check_embedded(root)
     dead = sorted((allowed["token"] | allowed["link"]) - used)
     return findings, dead, files, skills, agents
 
