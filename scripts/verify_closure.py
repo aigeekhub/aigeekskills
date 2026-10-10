@@ -91,6 +91,8 @@ def check_text(files, skills, agents, allowed, root, used):
                     else:
                         findings.append(("token", rel, n, role))
             for m in PSTACK_TOKEN.finditer(line):
+                if m.group(1).endswith("-"):
+                    continue  # placeholder prefix such as pstack:effort-<level>
                 if m.group(1) not in known and f"pstack:{m.group(1)}" not in allowed["token"]:
                     findings.append(("token", rel, n, f"pstack:{m.group(1)}"))
             for m in SKILL_TOOL.finditer(line):

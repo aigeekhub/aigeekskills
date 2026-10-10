@@ -1,0 +1,6 @@
+# Upstream packs imported with git subtree. Format: pack|remote|url|prefix|branch
+# Read by scripts/sync-upstream.sh. Git remotes are local config and do not travel with a clone,
+# so the script recreates them from this file on first use.
+mattpocock|mattpocock-upstream|https://github.com/mattpocock/skills.git|skills/mattpocock|main
+compound-engineering|ce-upstream|https://github.com/EveryInc/compound-engineering-plugin.git|skills/compound-engineering|main
+pstack|pstack-upstream|https://github.com/michael-denyer/pstack-claude.git|skills/pstack|main
