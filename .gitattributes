@@ -1,0 +1,7 @@
+# Pin our own executables and parsed data files to LF so a Windows checkout (core.autocrlf=true)
+# cannot put a carriage return in a shebang or a roster line. Deliberately NOT a catch-all
+# `* text=auto`: that would renormalize the three imported packs under skills/ and bury real
+# subtree diffs in line-ending noise.
+scripts/*.sh   text eol=lf
+scripts/*.py   text eol=lf
+scripts/*.txt  text eol=lf
