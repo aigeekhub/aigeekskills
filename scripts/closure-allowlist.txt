@@ -1,0 +1,29 @@
+# Known false positives for scripts/verify_closure.py. Format: kind|value|reason
+# Anything NOT listed here fails the closure check, so a new entry needs a human decision:
+# a real dangling reference gets fixed, noise gets a line here WITH a reason.
+
+# --- token: ce-* strings that look like skill names but are not ---
+token|ce-pr-body|mktemp filename template in ce-commit-push-pr (ce-pr-body.XXXXXX)
+token|ce-goal-prompt|mktemp filename template in ce-plan plan-handoff
+token|ce-proof-state|mktemp filename template in ce-proof workflows
+token|ce-brainstorm-visual|scratch directory name in ce-brainstorm visual-probes
+token|ce-docs-root|HTML comment marker delimiting the artifact-root block (ce-docs-root:start)
+token|ce-durable-bar|HTML comment marker delimiting the durable-bar block in ce-compound
+token|ce-config-layers|HTML comment marker in CE skills
+token|ce-section|HTML comment / data attribute marker in ce-brainstorm output
+token|ce-unified-plan|artifact_contract schema value (ce-unified-plan/v1), not a skill
+token|ce-plan-bootstrap|product_contract_source metadata value, not a skill
+token|ce-work-beta|retired skill, mentioned historically in ce-code-review dispatch-reviewers
+token|ce-resolve|upstream's own shorthand for ce-resolve-pr-feedback in ce-babysit-pr prose (envelope.md, tick.md)
+
+# --- token: bare role-name strings that are not shipped personas ---
+token|code-simplicity-reviewer|retired agent; ce-compound enhancement.md says "Do not use the deleted code-simplicity-reviewer" (CE went agentless, June 2026)
+token|cursor-agent|external Cursor CLI binary used by cross-model-review.md and cross-model-panel.md, not a skill
+token|ready-for-agent|Matt Pocock triage label name (triage, to-spec, to-tickets), not a skill
+
+# --- link: relative-link targets that are placeholders or examples, not real files ---
+link|link|literal placeholder in mattpocock wayfinder SKILL.md
+link|./src/ordering/CONTEXT.md|example path illustrating a user's repo layout (domain-modeling)
+link|./src/billing/CONTEXT.md|example path illustrating a user's repo layout (domain-modeling)
+link|./src/fulfillment/CONTEXT.md|example path illustrating a user's repo layout (domain-modeling)
+link|./src/packages/README.md|example path illustrating a user's repo layout (setup-ts-deep-modules)
